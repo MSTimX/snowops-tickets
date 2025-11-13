@@ -1,65 +1,102 @@
 package config
 
 import (
-	"log"
-	"os"
+	"fmt"
+	"time"
 
-	"github.com/joho/godotenv"
+	"github.com/spf13/viper"
 )
 
-// Config хранит все настройки сервиса.
-type Config struct {
-	HTTPPort string
+type HTTPConfig struct {
+	Host string
+	Port int
+}
 
-	DBHost     string
-	DBPort     string
-	DBUser     string
-	DBPassword string
-	DBName     string
-	DBSSLMode  string
-	DBTimeZone string
+type DBConfig struct {
+	DSN             string
+	MaxOpenConns    int
+	MaxIdleConns    int
+	ConnMaxLifetime time.Duration
+}
 
-	JWTSecret string
+type AuthConfig struct {
+	AccessSecret string
+}
 
+type ExternalServicesConfig struct {
 	AuthServiceURL       string
 	RolesServiceURL      string
 	OperationsServiceURL string
 	AIServiceURL         string
 }
 
-// getEnv достаёт переменную окружения, если нет — берёт дефолт.
-func getEnv(key, defaultValue string) string {
-	if value, ok := os.LookupEnv(key); ok && value != "" {
-		return value
-	}
-	return defaultValue
+type Config struct {
+	Environment      string
+	HTTP             HTTPConfig
+	DB               DBConfig
+	Auth             AuthConfig
+	ExternalServices ExternalServicesConfig
 }
 
-// Load загружает .env (если есть) и собирает конфиг.
-func Load() *Config {
-	// Пытаемся подгрузить .env, если нет — не считаем это ошибкой.
-	_ = godotenv.Load()
+func Load() (*Config, error) {
+	v := viper.New()
+	v.SetConfigName("app")
+	v.SetConfigType("env")
+	v.AddConfigPath(".")
+	v.AddConfigPath("./config")
+	v.AddConfigPath("./deploy")
+	v.AddConfigPath("./internal/config")
+
+	v.AutomaticEnv()
+
+	_ = v.ReadInConfig()
 
 	cfg := &Config{
-		HTTPPort: getEnv("HTTP_PORT", "8080"),
-
-		DBHost:     getEnv("DB_HOST", "localhost"),
-		DBPort:     getEnv("DB_PORT", "5432"),
-		DBUser:     getEnv("DB_USER", "postgres"),
-		DBPassword: getEnv("DB_PASSWORD", ""),
-		DBName:     getEnv("DB_NAME", "snowops_tickets"),
-		DBSSLMode:  getEnv("DB_SSLMODE", "disable"),
-		DBTimeZone: getEnv("DB_TIMEZONE", "Asia/Almaty"),
-
-		JWTSecret: getEnv("JWT_SECRET", "dev-secret-change-me"),
-
-		AuthServiceURL:       getEnv("AUTH_SERVICE_URL", "http://localhost:8081"),
-		RolesServiceURL:      getEnv("ROLES_SERVICE_URL", "http://localhost:8082"),
-		OperationsServiceURL: getEnv("OPERATIONS_SERVICE_URL", "http://localhost:8083"),
-		AIServiceURL:         getEnv("AI_SERVICE_URL", ""),
+		Environment: v.GetString("APP_ENV"),
+		HTTP: HTTPConfig{
+			Host: v.GetString("HTTP_HOST"),
+			Port: v.GetInt("HTTP_PORT"),
+		},
+		DB: DBConfig{
+			DSN:             v.GetString("DB_DSN"),
+			MaxOpenConns:    v.GetInt("DB_MAX_OPEN_CONNS"),
+			MaxIdleConns:    v.GetInt("DB_MAX_IDLE_CONNS"),
+			ConnMaxLifetime: v.GetDuration("DB_CONN_MAX_LIFETIME"),
+		},
+		Auth: AuthConfig{
+			AccessSecret: v.GetString("JWT_ACCESS_SECRET"),
+		},
+		ExternalServices: ExternalServicesConfig{
+			AuthServiceURL:       v.GetString("AUTH_SERVICE_URL"),
+			RolesServiceURL:      v.GetString("ROLES_SERVICE_URL"),
+			OperationsServiceURL: v.GetString("OPERATIONS_SERVICE_URL"),
+			AIServiceURL:         v.GetString("AI_SERVICE_URL"),
+		},
 	}
 
-	log.Printf("config loaded: HTTP_PORT=%s, DB_HOST=%s, DB_NAME=%s", cfg.HTTPPort, cfg.DBHost, cfg.DBName)
+	if cfg.HTTP.Host == "" {
+		cfg.HTTP.Host = "0.0.0.0"
+	}
+	if cfg.HTTP.Port == 0 {
+		cfg.HTTP.Port = 8080
+	}
+	if cfg.Environment == "" {
+		cfg.Environment = "development"
+	}
 
-	return cfg
+	if err := validate(cfg); err != nil {
+		return nil, err
+	}
+
+	return cfg, nil
+}
+
+func validate(cfg *Config) error {
+	if cfg.DB.DSN == "" {
+		return fmt.Errorf("DB_DSN is required")
+	}
+	if cfg.Auth.AccessSecret == "" {
+		return fmt.Errorf("JWT_ACCESS_SECRET is required")
+	}
+	return nil
 }

@@ -3,58 +3,50 @@ package repository
 import (
 	"context"
 
-	"github.com/google/uuid"
 	"gorm.io/gorm"
 
-	"ticket-service/internal/models"
+	"ticket-service/internal/model"
 )
 
-// TicketRepository инкапсулирует операции доступа к данным заявок.
 type TicketRepository struct {
 	db *gorm.DB
 }
 
-// NewTicketRepository создаёт новый экземпляр TicketRepository.
 func NewTicketRepository(db *gorm.DB) *TicketRepository {
 	return &TicketRepository{db: db}
 }
 
-// Create записывает новую заявку в базу данных.
-func (r *TicketRepository) Create(ctx context.Context, ticket *models.Ticket) error {
+func (r *TicketRepository) Create(ctx context.Context, ticket *model.Ticket) error {
 	return r.db.WithContext(ctx).Create(ticket).Error
 }
 
-// GetByID возвращает заявку по идентификатору.
-func (r *TicketRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Ticket, error) {
-	var ticket models.Ticket
-	if err := r.db.WithContext(ctx).First(&ticket, "id = ?", id).Error; err != nil {
+func (r *TicketRepository) GetByID(ctx context.Context, id string) (*model.Ticket, error) {
+	var ticket model.Ticket
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&ticket).Error
+	if err != nil {
 		return nil, err
 	}
 	return &ticket, nil
 }
 
-// Save сохраняет изменения заявки.
-func (r *TicketRepository) Save(ctx context.Context, ticket *models.Ticket) error {
+func (r *TicketRepository) Update(ctx context.Context, ticket *model.Ticket) error {
 	return r.db.WithContext(ctx).Save(ticket).Error
 }
 
-// TicketListFilter описывает параметры фильтрации списка заявок.
 type TicketListFilter struct {
-	Status         string
-	ContractorID   *uuid.UUID
-	CleaningAreaID *uuid.UUID
-	CreatedByOrgID *uuid.UUID
-	DriverID       *uuid.UUID
+	Status         *model.TicketStatus
+	ContractorID   *string
+	CleaningAreaID *string
+	CreatedByOrgID *string
+	DriverID       *string
 }
 
-// List возвращает список заявок с учётом заданных фильтров.
-func (r *TicketRepository) List(ctx context.Context, filter TicketListFilter) ([]models.Ticket, error) {
-	var tickets []models.Ticket
+func (r *TicketRepository) List(ctx context.Context, filter TicketListFilter) ([]model.Ticket, error) {
+	var tickets []model.Ticket
+	query := r.db.WithContext(ctx).Model(&model.Ticket{})
 
-	query := r.db.WithContext(ctx).Model(&models.Ticket{})
-
-	if filter.Status != "" {
-		query = query.Where("status = ?", filter.Status)
+	if filter.Status != nil {
+		query = query.Where("status = ?", *filter.Status)
 	}
 	if filter.ContractorID != nil {
 		query = query.Where("contractor_id = ?", *filter.ContractorID)
@@ -67,8 +59,7 @@ func (r *TicketRepository) List(ctx context.Context, filter TicketListFilter) ([
 	}
 	if filter.DriverID != nil {
 		query = query.Joins("JOIN ticket_assignments ta ON ta.ticket_id = tickets.id").
-			Where("ta.driver_id = ?", *filter.DriverID).
-			Distinct()
+			Where("ta.driver_id = ? AND ta.is_active = ?", *filter.DriverID, true)
 	}
 
 	if err := query.Order("created_at DESC").Find(&tickets).Error; err != nil {
