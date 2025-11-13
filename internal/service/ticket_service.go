@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 
 	"ticket-service/internal/model"
 	"ticket-service/internal/repository"
@@ -53,6 +54,10 @@ func (s *TicketService) Create(ctx context.Context, principal model.Principal, i
 		return nil, ErrInvalidInput
 	}
 
+	if plannedEndAt.Before(plannedStartAt) || plannedEndAt.Equal(plannedStartAt) {
+		return nil, ErrInvalidInput
+	}
+
 	ticket := &model.Ticket{
 		CleaningAreaID: cleaningAreaID,
 		ContractorID:   contractorID,
@@ -81,7 +86,10 @@ type CreateTicketInput struct {
 func (s *TicketService) Get(ctx context.Context, principal model.Principal, id string) (*model.Ticket, error) {
 	ticket, err := s.ticketRepo.GetByID(ctx, id)
 	if err != nil {
-		return nil, ErrNotFound
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
 	}
 
 	if !s.canAccessTicket(principal, ticket) {

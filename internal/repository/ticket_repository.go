@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 
 	"gorm.io/gorm"
 
@@ -24,6 +25,9 @@ func (r *TicketRepository) GetByID(ctx context.Context, id string) (*model.Ticke
 	var ticket model.Ticket
 	err := r.db.WithContext(ctx).Where("id = ?", id).First(&ticket).Error
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, gorm.ErrRecordNotFound
+		}
 		return nil, err
 	}
 	return &ticket, nil

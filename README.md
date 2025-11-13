@@ -8,7 +8,7 @@ ticket-service is the SnowOps microservice responsible for managing tickets, ass
 go run ./cmd/ticket-service
 ```
 
-The service listens on `:8080` and exposes a `/health` endpoint.
+The service listens on `:8080` and exposes a `/healthz` endpoint.
 
 ## Environment
 

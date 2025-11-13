@@ -9,7 +9,9 @@ import (
 var migrationStatements = []string{
 	`CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`,
 	`CREATE EXTENSION IF NOT EXISTS "pgcrypto";`,
-	`CREATE EXTENSION IF NOT EXISTS "postgis";`,
+	// PostGIS is pre-installed in postgis/postgis image, so we don't need to create it
+	// If using standard postgres image, uncomment the line below:
+	// `CREATE EXTENSION IF NOT EXISTS "postgis";`,
 	`DO $$
 	BEGIN
 		IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'ticket_status') THEN
